@@ -10,6 +10,7 @@
 ================================================================================*/
 
 #include <amxmodx>
+#include <engine>
 #include <fun>
 #include <fakemeta>
 #include <hamsandwich>
@@ -22,16 +23,17 @@
 // Settings file
 new const ZP_SETTINGS_FILE[] = "zombieplague.ini"
 
-new const bleeding_decals[] = { 99 , 107 , 108 , 184 , 185 , 186 , 187 , 188 , 189 }
+new const g_bleeding_decals[][] = { "{hand1", "{foot_r", "{foot_l", "{bloodhand6", "{bloodhand5", "{bloodhand4", "{bloodhand3", "{bloodhand2", "{bloodhand1" }
 
-new Array:g_bleeding_decals
+new Array:g_bleeding_decal_idxs
 
 #define TASK_BLOOD 100
 #define ID_BLOOD (taskid - TASK_BLOOD)
 
 #define CS_DEFAULT_FOV 90
 
-new g_IsModCZ
+#define WAD3_NAMELEN 16
+
 new g_MsgSetFOV
 
 new cvar_zombie_fov, cvar_zombie_silent, cvar_zombie_bleeding
@@ -49,31 +51,36 @@ public plugin_init()
 	
 	RegisterHam(Ham_Killed, "player", "fw_PlayerKilled")
 	RegisterHamBots(Ham_Killed, "fw_PlayerKilled")
-	
-	// Check if it's a CZ server
-	new mymod[6]
-	get_modname(mymod, charsmax(mymod))
-	if (equal(mymod, "czero")) g_IsModCZ = 1
 }
 
 public plugin_precache()
 {
 	// Initialize arrays
-	g_bleeding_decals = ArrayCreate(1, 1)
+	new Array:bleeding_decals = ArrayCreate(WAD3_NAMELEN, 1)
 	
 	// Load from external file
-	amx_load_setting_int_arr(ZP_SETTINGS_FILE, "Zombie Decals", "DECALS", g_bleeding_decals)
+	amx_load_setting_string_arr(ZP_SETTINGS_FILE, "Zombie Decals", "DECALS", bleeding_decals)
 	
 	// If we couldn't load from file, use and save default ones
 	new index
-	if (ArraySize(g_bleeding_decals) == 0)
+	if (ArraySize(bleeding_decals) == 0)
 	{
-		for (index = 0; index < sizeof bleeding_decals; index++)
-			ArrayPushCell(g_bleeding_decals, bleeding_decals[index])
+		for (index = 0; index < sizeof g_bleeding_decals; index++)
+			ArrayPushString(bleeding_decals, g_bleeding_decals[index])
 		
 		// Save to external file
-		amx_save_setting_int_arr(ZP_SETTINGS_FILE, "Zombie Decals", "DECALS", g_bleeding_decals)
+		amx_save_setting_string_arr(ZP_SETTINGS_FILE, "Zombie Decals", "DECALS", bleeding_decals)
 	}
+
+	g_bleeding_decal_idxs = ArrayCreate(1, 1)
+	new size = ArraySize(bleeding_decals)
+	new decal[WAD3_NAMELEN]
+	for (index = 0; index < size; index++) {
+		ArrayGetString(bleeding_decals, index, decal, charsmax(decal))
+		ArrayPushCell(g_bleeding_decal_idxs, get_decal_index(decal))
+	}
+
+	ArrayDestroy(bleeding_decals)
 }
 
 public plugin_natives()
@@ -183,14 +190,15 @@ public zombie_bleeding(taskid)
 		originF[2] -= 18.0
 	else
 		originF[2] -= 36.0
-	
+
+	// TODO: Check CS:CZ working
 	// Send the decal message
 	message_begin(MSG_BROADCAST, SVC_TEMPENTITY)
 	write_byte(TE_WORLDDECAL) // TE id
 	engfunc(EngFunc_WriteCoord, originF[0]) // x
 	engfunc(EngFunc_WriteCoord, originF[1]) // y
 	engfunc(EngFunc_WriteCoord, originF[2]) // z
-	write_byte(ArrayGetCell(g_bleeding_decals, random_num(0, ArraySize(g_bleeding_decals) - 1)) + (g_IsModCZ * 12)) // decal number (offsets +12 for CZ)
+	write_byte(ArrayGetCell(g_bleeding_decal_idxs, random_num(0, ArraySize(g_bleeding_decal_idxs) - 1))) // decal number
 	message_end()
 }
 
